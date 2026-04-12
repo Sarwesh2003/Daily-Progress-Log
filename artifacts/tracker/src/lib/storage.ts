@@ -50,35 +50,18 @@ export function saveData(data: TrackerData): void {
   }
 }
 
-export function exportData(data: TrackerData): void {
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `achievement-tracker-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+export function generateSyncCode(data: TrackerData): string {
+  const json = JSON.stringify(data);
+  return btoa(encodeURIComponent(json));
 }
 
-export function importData(file: File): Promise<TrackerData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const parsed = JSON.parse(e.target?.result as string) as TrackerData;
-        if (!parsed.tasks || !parsed.records) {
-          reject(new Error("Invalid file format"));
-          return;
-        }
-        resolve({ ...parsed, version: CURRENT_VERSION });
-      } catch {
-        reject(new Error("Failed to parse file"));
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsText(file);
-  });
+export function parseSyncCode(code: string): TrackerData {
+  const json = decodeURIComponent(atob(code.trim()));
+  const parsed = JSON.parse(json) as TrackerData;
+  if (!parsed.tasks || !parsed.records) {
+    throw new Error("Invalid sync code");
+  }
+  return { ...parsed, version: CURRENT_VERSION };
 }
 
 export function formatDate(date: Date): string {
