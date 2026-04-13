@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install",
+  "buildCommand": "BASE_PATH=/ PORT=4173 pnpm --filter @workspace/tracker run build",
+  "outputDirectory": "artifacts/tracker/dist/public",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
