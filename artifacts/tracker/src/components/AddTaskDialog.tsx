@@ -55,10 +55,16 @@ export function AddTaskDialog({ open, onClose, editTask }: AddTaskDialogProps) {
         toast({ title: "Task added" });
       }
       onClose();
-    } catch {
+    } catch (e) {
+      const msg =
+        e instanceof Error && (e as { code?: string }).code === "permission-denied"
+          ? "Permission denied — Firestore rules not deployed? Run: firebase deploy --only firestore:rules --project daily-progress-log"
+          : e instanceof Error
+            ? e.message
+            : "Could not save task. Check your connection and try again.";
       toast({
         title: isEdit ? "Update failed" : "Add failed",
-        description: "Could not save task. Check your connection and try again.",
+        description: msg,
         variant: "destructive",
       });
     } finally {

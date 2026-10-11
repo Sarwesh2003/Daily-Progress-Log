@@ -15,20 +15,23 @@ service cloud.firestore {
 
     // Matches what firestore-service.ts actually writes:
     // { name, category, color, description?, isArchived, createdAt, updatedAt }
+    // Limits are generous for ciphertext: name/category/description are stored as
+    // JSON-stringified EncryptedPayload {s,v,c,ver} so they are longer than plaintext.
+    // Plaintext limits (UX) are enforced client-side; rules only guard against abuse.
     function isValidGoal(goalData) {
       return goalData.keys().hasAll(['name', 'category', 'color', 'createdAt', 'updatedAt', 'isArchived'])
         && goalData.name is string
         && goalData.name.size() > 0
-        && goalData.name.size() <= 100
+        && goalData.name.size() <= 2000
         && goalData.category is string
-        && goalData.category.size() <= 50
+        && goalData.category.size() <= 2000
         && goalData.color is string
         && goalData.color.size() > 0
         && goalData.color.size() <= 20
         && goalData.createdAt is timestamp
         && goalData.updatedAt is timestamp
         && goalData.isArchived is bool
-        && (!('description' in goalData) || (goalData.description is string && goalData.description.size() <= 500));
+        && (!('description' in goalData) || (goalData.description is string && goalData.description.size() <= 8000));
     }
 
     function isValidCheckin(checkinData) {
@@ -47,7 +50,8 @@ service cloud.firestore {
         && journalData.date is string
         && isValidDate(journalData.date)
         && journalData.content is string
-        && journalData.content.size() <= 10000
+        // Ciphertext is longer; 16KB covers JSON-stringified EncryptedPayload with ~10K plaintext.
+        && journalData.content.size() <= 16000
         && journalData.createdAt is timestamp
         && journalData.updatedAt is timestamp;
     }
