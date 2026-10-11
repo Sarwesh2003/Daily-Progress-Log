@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Pencil, Trash2, Settings2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Settings2, Archive, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCheckbox } from "@/components/TaskCheckbox";
 import { AddTaskDialog } from "@/components/AddTaskDialog";
 import { useTracker } from "@/context/TrackerContext";
 import { Task, getColorInfo } from "@/lib/storage";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -25,9 +26,11 @@ interface TaskRowProps {
   task: Task;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
+  onArchive: (id: string, isArchived: boolean) => void;
+  isArchived: boolean;
 }
 
-function TaskManageRow({ task, onEdit, onDelete }: TaskRowProps) {
+function TaskManageRow({ task, onEdit, onDelete, onArchive, isArchived }: TaskRowProps) {
   const colorInfo = getColorInfo(task.color);
   return (
     <motion.div
@@ -35,18 +38,38 @@ function TaskManageRow({ task, onEdit, onDelete }: TaskRowProps) {
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 8 }}
-      className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-muted/40 transition-colors group"
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-muted/40 transition-colors group",
+        isArchived && "opacity-60"
+      )}
     >
       <div className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", colorInfo.bg)} />
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium text-foreground truncate block">{task.name}</span>
-        {task.category && (
-          <span className={cn("text-xs px-1.5 py-0.5 rounded-md font-medium inline-block mt-0.5", colorInfo.light)}>
-            {task.category}
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {task.category && (
+            <span className={cn("text-xs px-1.5 py-0.5 rounded-md font-medium inline-block", colorInfo.light)}>
+              {task.category}
+            </span>
+          )}
+          {isArchived && (
+            <span className="text-xs px-1.5 py-0.5 rounded-md font-medium bg-muted text-muted-foreground">
+              Archived
+            </span>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => onArchive(task.id, !isArchived)}
+          title={isArchived ? "Unarchive" : "Archive"}
+          data-testid={`button-archive-task-${task.id}`}
+        >
+          {isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -76,7 +99,8 @@ interface TasksPanelProps {
 }
 
 export function TasksPanel({ managingTasks, onToggleManage }: TasksPanelProps) {
-  const { data, deleteTask, selectedDate, today } = useTracker();
+  const { data, deleteTask, selectedDate, today, archiveTask } = useTracker();
+  const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
 
@@ -84,6 +108,26 @@ export function TasksPanel({ managingTasks, onToggleManage }: TasksPanelProps) {
   const completedCount = data.records[selectedDate]?.completedTaskIds.length ?? 0;
   const totalCount = data.tasks.length;
   const isFuture = selectedDate > today;
+
+  const handleDelete = async (id: string) => {
+    const ok = window.confirm("Delete this task? This cannot be undone.");
+    if (!ok) return;
+    try {
+      await deleteTask(id);
+      toast({ title: "Task deleted" });
+    } catch {
+      toast({ title: "Delete failed", description: "Could not delete task. Try again.", variant: "destructive" });
+    }
+  };
+
+  const handleArchive = async (id: string, isArchived: boolean) => {
+    try {
+      await archiveTask(id, isArchived);
+      toast({ title: isArchived ? "Task archived" : "Task restored" });
+    } catch {
+      toast({ title: "Action failed", description: "Could not update task. Try again.", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -156,7 +200,9 @@ export function TasksPanel({ managingTasks, onToggleManage }: TasksPanelProps) {
                     key={task.id}
                     task={task}
                     onEdit={(t) => setEditTask(t)}
-                    onDelete={deleteTask}
+                    onDelete={handleDelete}
+                    onArchive={handleArchive}
+                    isArchived={task.isArchived ?? false}
                   />
                 ))}
               </AnimatePresence>
@@ -170,11 +216,11 @@ export function TasksPanel({ managingTasks, onToggleManage }: TasksPanelProps) {
             exit={{ opacity: 0 }}
             className="space-y-2"
           >
-            {data.tasks.length === 0 ? (
+            {data.tasks.filter((t) => !t.isArchived).length === 0 ? (
               <EmptyState onAdd={() => setAddOpen(true)} />
             ) : (
               <AnimatePresence>
-                {data.tasks.map((task) => (
+                {data.tasks.filter((t) => !t.isArchived).map((task) => (
                   <TaskCheckbox key={task.id} task={task} date={selectedDate} />
                 ))}
               </AnimatePresence>

@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidDate(dateString) {
+      return dateString.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    // Matches what firestore-service.ts actually writes:
+    // { name, category, color, description?, isArchived, createdAt, updatedAt }
+    function isValidGoal(goalData) {
+      return goalData.keys().hasAll(['name', 'category', 'color', 'createdAt', 'updatedAt', 'isArchived'])
+        && goalData.name is string
+        && goalData.name.size() > 0
+        && goalData.name.size() <= 100
+        && goalData.category is string
+        && goalData.category.size() <= 50
+        && goalData.color is string
+        && goalData.color.size() > 0
+        && goalData.color.size() <= 20
+        && goalData.createdAt is timestamp
+        && goalData.updatedAt is timestamp
+        && goalData.isArchived is bool
+        && (!('description' in goalData) || (goalData.description is string && goalData.description.size() <= 500));
+    }
+
+    function isValidCheckin(checkinData) {
+      return checkinData.keys().hasAll(['goalId', 'date', 'completed', 'createdAt', 'updatedAt'])
+        && checkinData.goalId is string
+        && checkinData.goalId.size() > 0
+        && checkinData.date is string
+        && isValidDate(checkinData.date)
+        && checkinData.completed is bool
+        && checkinData.createdAt is timestamp
+        && checkinData.updatedAt is timestamp;
+    }
+
+    function isValidJournal(journalData) {
+      return journalData.keys().hasAll(['date', 'content', 'createdAt', 'updatedAt'])
+        && journalData.date is string
+        && isValidDate(journalData.date)
+        && journalData.content is string
+        && journalData.content.size() <= 10000
+        && journalData.createdAt is timestamp
+        && journalData.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+
+      match /meta/{metaDoc} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /goals/{goalId} {
+        // NOTE: reads must NOT validate request.resource (it's null on get/list).
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow update: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /checkins/{checkinId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidCheckin(request.resource.data)
+          && checkinId == request.resource.data.goalId + '_' + request.resource.data.date;
+        allow update: if isOwner(userId)
+          && isValidCheckin(request.resource.data)
+          && request.resource.data.goalId == resource.data.goalId
+          && request.resource.data.date == resource.data.date;
+        allow delete: if isOwner(userId);
+      }
+
+      match /journals/{journalId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidJournal(request.resource.data)
+          && journalId == request.resource.data.date;
+        allow update: if isOwner(userId)
+          && isValidJournal(request.resource.data)
+          && request.resource.data.date == resource.data.date;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

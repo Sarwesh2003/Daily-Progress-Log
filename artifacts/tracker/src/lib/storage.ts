@@ -4,6 +4,10 @@ export interface Task {
   category: string;
   color: string;
   createdAt: string;
+  /** Optional longer description (added with Firestore upgrade). */
+  description?: string;
+  /** Soft-archive flag; archived goals stay visible in history but not in the daily list. */
+  isArchived?: boolean;
 }
 
 export interface DayRecord {

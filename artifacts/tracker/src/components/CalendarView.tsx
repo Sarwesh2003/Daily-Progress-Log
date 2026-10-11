@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { CalendarDays, NotebookPen } from "lucide-react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTracker } from "@/context/TrackerContext";
-import { formatDate, computeStats } from "@/lib/storage";
+import { formatDate } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -14,13 +14,14 @@ const MONTHS = [
 
 interface CalendarViewProps {
   onSelectDate: (date: string) => void;
+  /** Lifted so Home can sync the monthly progress panel with the calendar month. */
+  viewMonth: number;
+  viewYear: number;
+  onMonthChange: (month: number, year: number) => void;
 }
 
-export function CalendarView({ onSelectDate }: CalendarViewProps) {
-  const { data, selectedDate, today } = useTracker();
-  const todayDate = new Date();
-  const [viewYear, setViewYear] = useState(todayDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
+export function CalendarView({ onSelectDate, viewMonth, viewYear, onMonthChange }: CalendarViewProps) {
+  const { data, selectedDate, today, journals } = useTracker();
 
   const firstDay = new Date(viewYear, viewMonth, 1);
   const lastDay = new Date(viewYear, viewMonth + 1, 0);
@@ -29,17 +30,17 @@ export function CalendarView({ onSelectDate }: CalendarViewProps) {
   const totalDays = lastDay.getDate();
 
   const prevMonth = () => {
-    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
-    else setViewMonth(m => m - 1);
+    if (viewMonth === 0) onMonthChange(11, viewYear - 1);
+    else onMonthChange(viewMonth - 1, viewYear);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
-    else setViewMonth(m => m + 1);
+    if (viewMonth === 11) onMonthChange(0, viewYear + 1);
+    else onMonthChange(viewMonth + 1, viewYear);
   };
 
   const goToToday = () => {
-    setViewYear(todayDate.getFullYear());
-    setViewMonth(todayDate.getMonth());
+    const t = new Date();
+    onMonthChange(t.getMonth(), t.getFullYear());
     onSelectDate(today);
   };
 
@@ -51,13 +52,22 @@ export function CalendarView({ onSelectDate }: CalendarViewProps) {
   // Pad to full weeks
   while (cells.length % 7 !== 0) cells.push(null);
 
+  // Only active (non-archived) goals count toward the daily dot.
+  const activeTasks = data.tasks.filter((t) => !t.isArchived);
+
   function getDayStats(day: number) {
     const date = formatDate(new Date(viewYear, viewMonth, day));
+    if (activeTasks.length === 0) return null;
     const record = data.records[date];
-    if (!record || data.tasks.length === 0) return null;
-    const done = record.completedTaskIds.length;
-    const total = data.tasks.length;
+    const done = record ? record.completedTaskIds.filter((id) => activeTasks.some((t) => t.id === id)).length : 0;
+    const total = activeTasks.length;
+    if (done === 0 && !data.records[date]) return null;
     return { done, total, rate: Math.round((done / total) * 100) };
+  }
+
+  function hasJournal(day: number) {
+    const date = formatDate(new Date(viewYear, viewMonth, day));
+    return (journals[date] ?? "").length > 0;
   }
 
   function getDotColor(rate: number): string {
@@ -114,6 +124,7 @@ export function CalendarView({ onSelectDate }: CalendarViewProps) {
             const isToday = today === dateStr;
             const isFuture = dateStr > today;
             const stats = getDayStats(day);
+            const hasJournalEntry = !isFuture && hasJournal(day);
 
             return (
               <motion.button
@@ -132,19 +143,32 @@ export function CalendarView({ onSelectDate }: CalendarViewProps) {
                     : "hover:bg-muted text-foreground cursor-pointer"
                 )}
               >
+                {hasJournalEntry && (
+                  <span
+                    className={cn(
+                      "absolute top-1 right-1 w-1.5 h-1.5 rounded-full",
+                      isSelected ? "bg-primary-foreground" : "bg-violet-500"
+                    )}
+                    aria-hidden
+                    title="Journal entry"
+                  />
+                )}
                 <span className={cn("text-sm leading-none", isToday && !isSelected ? "font-bold" : "font-medium")}>
                   {day}
                 </span>
-                {stats && !isFuture && (
-                  <div className="mt-1 flex gap-0.5 items-center">
-                    <div
+                <span className="mt-1 flex items-center gap-1 min-h-[6px]">
+                  {stats && !isFuture && (
+                    <span
                       className={cn(
                         "w-1.5 h-1.5 rounded-full",
                         isSelected ? "bg-primary-foreground/80" : getDotColor(stats.rate)
                       )}
                     />
-                  </div>
-                )}
+                  )}
+                  {hasJournalEntry && (
+                    <NotebookPen className={cn("w-2.5 h-2.5", isSelected ? "text-primary-foreground/70" : "text-violet-500")} />
+                  )}
+                </span>
               </motion.button>
             );
           })}

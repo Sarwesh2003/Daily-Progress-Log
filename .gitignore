@@ -47,3 +47,17 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# --- env & local secrets (never commit) ---
+.env
+.env.*
+!.env.example
+artifacts/tracker/.env.local
+artifacts/tracker/.env
+
+# Firebase local cache / service accounts
+.firebase/
+firebase-debug.log
+firestore-debug.log
+serviceAccountKey.json
+**/serviceAccountKey.json
